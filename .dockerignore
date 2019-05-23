@@ -1,0 +1,12 @@
+**/__pycache__
+.cache/
+
+**/logs
+logs
+
+allure-report/
+assets/
+report/
+
+report.html
+report.json

@@ -1,0 +1,9 @@
+pytest
+pytest-logger
+pytest-html
+
+jsonschema
+
+requests
+
+psycopg2

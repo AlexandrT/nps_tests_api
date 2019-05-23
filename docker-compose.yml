@@ -1,0 +1,11 @@
+version: '2'
+
+services:
+  tests:
+    build:
+      context: ./
+      dockerfile: deploy/Dockerfile
+
+    network_mode: host
+    volumes:
+      - ./reports:/root/www/imhio/reports
