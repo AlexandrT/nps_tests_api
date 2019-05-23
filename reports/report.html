@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <style>body {
+	font-family: Helvetica, Arial, sans-serif;
+	font-size: 12px;
+	min-width: 1200px;
+	color: #999;
+}
+
+h1 {
+	font-size: 24px;
+	color: black;
+}
+
+h2 {
+	font-size: 16px;
+	color: black;
+}
+
+p {
+    color: black;
+}
+
+a {
+	color: #999;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+/******************************
+ * SUMMARY INFORMATION
+ ******************************/
+
+#environment td {
+	padding: 5px;
+	border: 1px solid #E6E6E6;
+}
+
+#environment tr:nth-child(odd) {
+	background-color: #f6f6f6;
+}
+
+/******************************
+ * TEST RESULT COLORS
+ ******************************/
+span.passed, .passed .col-result {
+	color: green;
+}
+span.skipped, span.xfailed, span.rerun, .skipped .col-result, .xfailed .col-result, .rerun .col-result {
+	color: orange;
+}
+span.error, span.failed, span.xpassed, .error .col-result, .failed .col-result, .xpassed .col-result  {
+	color: red;
+}
+
+
+/******************************
+ * RESULTS TABLE
+ *
+ * 1. Table Layout
+ * 2. Extra
+ * 3. Sorting items
+ *
+ ******************************/
+
+/*------------------
+ * 1. Table Layout
+ *------------------*/
+
+#results-table {
+	border: 1px solid #e6e6e6;
+	color: #999;
+	font-size: 12px;
+	width: 100%
+}
+
+#results-table th, #results-table td {
+	padding: 5px;
+	border: 1px solid #E6E6E6;
+	text-align: left
+}
+#results-table th {
+	font-weight: bold
+}
+
+/*------------------
+ * 2. Extra
+ *------------------*/
+
+.log:only-child {
+	height: inherit
+}
+.log {
+	background-color: #e6e6e6;
+	border: 1px solid #e6e6e6;
+	color: black;
+	display: block;
+	font-family: "Courier New", Courier, monospace;
+	height: 230px;
+	overflow-y: scroll;
+	padding: 5px;
+	white-space: pre-wrap
+}
+div.image {
+	border: 1px solid #e6e6e6;
+	float: right;
+	height: 240px;
+	margin-left: 5px;
+	overflow: hidden;
+	width: 320px
+}
+div.image img {
+	width: 320px
+}
+.collapsed {
+	display: none;
+}
+.expander::after {
+	content: " (show details)";
+	color: #BBB;
+	font-style: italic;
+	cursor: pointer;
+}
+.collapser::after {
+	content: " (hide details)";
+	color: #BBB;
+	font-style: italic;
+	cursor: pointer;
+}
+
+/*------------------
+ * 3. Sorting items
+ *------------------*/
+.sortable {
+	cursor: pointer;
+}
+
+.sort-icon {
+	font-size: 0px;
+	float: left;
+	margin-right: 5px;
+	margin-top: 5px;
+	/*triangle*/
+	width: 0;
+	height: 0;
+	border-left: 8px solid transparent;
+	border-right: 8px solid transparent;
+}
+
+.inactive .sort-icon {
+	/*finish triangle*/
+	border-top: 8px solid #E6E6E6;
+}
+
+.asc.active .sort-icon {
+	/*finish triangle*/
+	border-bottom: 8px solid #999;
+}
+
+.desc.active .sort-icon {
+	/*finish triangle*/
+	border-top: 8px solid #999;
+}
+</style></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    toggle_sort_states(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+    var multiplier = reversed ? -1 : 1;
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+        return multiplier * (key_a >= key_b ? 1 : -1);
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 23-May-2019 at 01:18:44 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v1.20.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pytest&apos;: &apos;4.5.0&apos;, &apos;py&apos;: &apos;1.8.0&apos;, &apos;pluggy&apos;: &apos;0.11.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Linux-4.9.125-linuxkit-x86_64-with-debian-9.7</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;metadata&apos;: &apos;1.8.0&apos;, &apos;logger&apos;: &apos;0.5.0&apos;, &apos;html&apos;: &apos;1.20.0&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.6.8</td></tr></table>
+    <h2>Summary</h2>
+    <p>25 tests ran in 0.77 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">7 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">18 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bf58b38&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bf17e48&gt;<br/>body = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;3&#x27;}, user_action = &#x27;3&#x27;<br/>feedback = None<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;1&quot;, &quot;test&quot;),<br/>            (&quot;2&quot;, &quot;test\ntest&quot;),<br/>            (&quot;3&quot;, None),<br/>            (&quot;2&quot;, &quot;&quot;),<br/>            (&quot;8&quot;, None),<br/>            (&quot;10&quot;, &quot;&quot;),<br/>            (&quot;9&quot;, &quot;test1&quot;), #TODO сохраняется ли коммент?<br/>            (&quot;0&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, &quot;   test   &quot;)<br/>        ]<br/>    )<br/>    def test_full_body(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with valid json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>        assert_valid_response(res, STATUS_CODE_OK, CONTENT_TYPE_JSON)<br/>        assert_valid_schema(payload, &#x27;ok.json&#x27;)<br/>    <br/>        assert payload[&quot;status&quot;] == &quot;ok&quot;<br/>    <br/>&gt;       assert_from_db(connect_to_db, user_action, feedback.strip())<br/><span class="error">E       AttributeError: &#x27;NoneType&#x27; object has no attribute &#x27;strip&#x27;</span><br/><br/>body       = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;3&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = None<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bf58b38&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bf17e48&gt;<br/>user_action = &#x27;3&#x27;<br/><br/>tests/test_create_rate.py:59: AttributeError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,687 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,687 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,692 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;3&quot;, &quot;feedback&quot;: null}
+2019-05-23 01:18:43,694 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,699 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,700 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;3&quot;, &quot;feedback&quot;: null}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bef4eb8&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bf17780&gt;<br/>body = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;8&#x27;}, user_action = &#x27;8&#x27;<br/>feedback = None<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;1&quot;, &quot;test&quot;),<br/>            (&quot;2&quot;, &quot;test\ntest&quot;),<br/>            (&quot;3&quot;, None),<br/>            (&quot;2&quot;, &quot;&quot;),<br/>            (&quot;8&quot;, None),<br/>            (&quot;10&quot;, &quot;&quot;),<br/>            (&quot;9&quot;, &quot;test1&quot;), #TODO сохраняется ли коммент?<br/>            (&quot;0&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, &quot;   test   &quot;)<br/>        ]<br/>    )<br/>    def test_full_body(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with valid json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>        assert_valid_response(res, STATUS_CODE_OK, CONTENT_TYPE_JSON)<br/>        assert_valid_schema(payload, &#x27;ok.json&#x27;)<br/>    <br/>        assert payload[&quot;status&quot;] == &quot;ok&quot;<br/>    <br/>&gt;       assert_from_db(connect_to_db, user_action, feedback.strip())<br/><span class="error">E       AttributeError: &#x27;NoneType&#x27; object has no attribute &#x27;strip&#x27;</span><br/><br/>body       = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;8&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = None<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bef4eb8&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bf17780&gt;<br/>user_action = &#x27;8&#x27;<br/><br/>tests/test_create_rate.py:59: AttributeError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,786 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,786 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,790 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;8&quot;, &quot;feedback&quot;: null}
+2019-05-23 01:18:43,792 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,796 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,796 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;8&quot;, &quot;feedback&quot;: null}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc51518&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc54048; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc51f98&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;test2&#x27;, &#x27;user_action&#x27;: &#x27;0&#x27;}, user_action = &#x27;0&#x27;<br/>feedback = &#x27;test2&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;1&quot;, &quot;test&quot;),<br/>            (&quot;2&quot;, &quot;test\ntest&quot;),<br/>            (&quot;3&quot;, None),<br/>            (&quot;2&quot;, &quot;&quot;),<br/>            (&quot;8&quot;, None),<br/>            (&quot;10&quot;, &quot;&quot;),<br/>            (&quot;9&quot;, &quot;test1&quot;), #TODO сохраняется ли коммент?<br/>            (&quot;0&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, &quot;   test   &quot;)<br/>        ]<br/>    )<br/>    def test_full_body(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with valid json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>        assert_valid_response(res, STATUS_CODE_OK, CONTENT_TYPE_JSON)<br/>        assert_valid_schema(payload, &#x27;ok.json&#x27;)<br/>    <br/>        assert payload[&quot;status&quot;] == &quot;ok&quot;<br/>    <br/>&gt;       assert_from_db(connect_to_db, user_action, feedback.strip())<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;test2&#x27;, &#x27;user_action&#x27;: &#x27;0&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64bc54048; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test2&#x27;<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc51518&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc51f98&gt;<br/>user_action = &#x27;0&#x27;<br/><br/>tests/test_create_rate.py:59: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>conn = &lt;connection object at 0x7fa64bc54048; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>user_action = &#x27;0&#x27;, feedback = &#x27;test2&#x27;<br/><br/>    def assert_from_db(conn, user_action, feedback):<br/>        result = get_from_db(conn)<br/>        flag = False<br/>    <br/>        if result[&quot;user_action&quot;] != user_action:<br/>            flag = True<br/>    <br/>        if result[&quot;feedback&quot;] != feedback:<br/>            if len(set([result[&quot;feedback&quot;], feedback]) - set([&#x27;&#x27;, None])) != 0:<br/>                flag = True<br/>    <br/>        if flag:<br/>            raise AssertionError(f&quot;params from request - &#x27;user_action&#x27;: \<br/>                    {user_action}, &#x27;feedback&#x27;: {feedback}\nparams from DB - \<br/>&gt;                   &#x27;user_action&#x27;: {result[&#x27;user_action&#x27;]}, &#x27;feedback&#x27;: {result[&#x27;feedback&#x27;]}&quot;)<br/><span class="error">E           AssertionError: params from request - &#x27;user_action&#x27;:                 0, &#x27;feedback&#x27;: test2</span><br/><span class="error">E           params from DB -                 &#x27;user_action&#x27;: None, &#x27;feedback&#x27;: test2</span><br/><br/>conn       = &lt;connection object at 0x7fa64bc54048; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test2&#x27;<br/>flag       = True<br/>result     = {&#x27;device&#x27;: &#x27;desktop&#x27;, &#x27;feedback&#x27;: &#x27;test2&#x27;, &#x27;user_action&#x27;: &#x27;None&#x27;}<br/>user_action = &#x27;0&#x27;<br/><br/>tests/support/assertions.py:72: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,857 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,857 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,863 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;0&quot;, &quot;feedback&quot;: &quot;test2&quot;}
+2019-05-23 01:18:43,865 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,870 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,872 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;0&quot;, &quot;feedback&quot;: &quot;test2&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc51fd0&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc724a8&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;   test   &#x27;, &#x27;user_action&#x27;: &#x27;4&#x27;}, user_action = &#x27;4&#x27;<br/>feedback = &#x27;   test   &#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;1&quot;, &quot;test&quot;),<br/>            (&quot;2&quot;, &quot;test\ntest&quot;),<br/>            (&quot;3&quot;, None),<br/>            (&quot;2&quot;, &quot;&quot;),<br/>            (&quot;8&quot;, None),<br/>            (&quot;10&quot;, &quot;&quot;),<br/>            (&quot;9&quot;, &quot;test1&quot;), #TODO сохраняется ли коммент?<br/>            (&quot;0&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, &quot;   test   &quot;)<br/>        ]<br/>    )<br/>    def test_full_body(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with valid json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>        assert_valid_response(res, STATUS_CODE_OK, CONTENT_TYPE_JSON)<br/>        assert_valid_schema(payload, &#x27;ok.json&#x27;)<br/>    <br/>        assert payload[&quot;status&quot;] == &quot;ok&quot;<br/>    <br/>&gt;       assert_from_db(connect_to_db, user_action, feedback.strip())<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;   test   &#x27;, &#x27;user_action&#x27;: &#x27;4&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;   test   &#x27;<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc51fd0&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc724a8&gt;<br/>user_action = &#x27;4&#x27;<br/><br/>tests/test_create_rate.py:59: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>conn = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>user_action = &#x27;4&#x27;, feedback = &#x27;test&#x27;<br/><br/>    def assert_from_db(conn, user_action, feedback):<br/>        result = get_from_db(conn)<br/>        flag = False<br/>    <br/>        if result[&quot;user_action&quot;] != user_action:<br/>            flag = True<br/>    <br/>        if result[&quot;feedback&quot;] != feedback:<br/>            if len(set([result[&quot;feedback&quot;], feedback]) - set([&#x27;&#x27;, None])) != 0:<br/>                flag = True<br/>    <br/>        if flag:<br/>            raise AssertionError(f&quot;params from request - &#x27;user_action&#x27;: \<br/>                    {user_action}, &#x27;feedback&#x27;: {feedback}\nparams from DB - \<br/>&gt;                   &#x27;user_action&#x27;: {result[&#x27;user_action&#x27;]}, &#x27;feedback&#x27;: {result[&#x27;feedback&#x27;]}&quot;)<br/><span class="error">E           AssertionError: params from request - &#x27;user_action&#x27;:                 4, &#x27;feedback&#x27;: test</span><br/><span class="error">E           params from DB -                 &#x27;user_action&#x27;: 4, &#x27;feedback&#x27;:    test</span><br/><br/>conn       = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test&#x27;<br/>flag       = True<br/>result     = {&#x27;device&#x27;: &#x27;desktop&#x27;, &#x27;feedback&#x27;: &#x27;   test   &#x27;, &#x27;user_action&#x27;: &#x27;4&#x27;}<br/>user_action = &#x27;4&#x27;<br/><br/>tests/support/assertions.py:72: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,893 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,894 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,898 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;4&quot;, &quot;feedback&quot;: &quot;   test   &quot;}
+2019-05-23 01:18:43,900 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,905 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,906 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;4&quot;, &quot;feedback&quot;: &quot;   test   &quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc725f8&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc7d080&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;&#x27;, &#x27;user_action&#x27;: &#x27;8&#x27;}, user_action = &#x27;8&#x27;, feedback = &#x27;&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;&#x27;, &#x27;user_action&#x27;: &#x27;8&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;&#x27;<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc725f8&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc7d080&gt;<br/>user_action = &#x27;8&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [200]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected status code - 400</span><br/><span class="error">E           Actual status code -                 200</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected status code - 400\nActual status code -                 200\n&#x27;<br/>response   = &lt;Response [200]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,925 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,925 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,929 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;8&quot;, &quot;feedback&quot;: &quot;&quot;}
+2019-05-23 01:18:43,931 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,935 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,936 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;8&quot;, &quot;feedback&quot;: &quot;&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc724e0&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc25358&gt;<br/>body = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;10&#x27;}, user_action = &#x27;10&#x27;<br/>feedback = None<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: &#x27;10&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = None<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc724e0&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc25358&gt;<br/>user_action = &#x27;10&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [200]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected status code - 400</span><br/><span class="error">E           Actual status code -                 200</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected status code - 400\nActual status code -                 200\n&#x27;<br/>response   = &lt;Response [200]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,951 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,951 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,955 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: null}
+2019-05-23 01:18:43,957 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,960 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,961 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: null}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc16198&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc542b8; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc48908&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;test&#x27;, &#x27;user_action&#x27;: &#x27;10&#x27;}, user_action = &#x27;10&#x27;<br/>feedback = &#x27;test&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;test&#x27;, &#x27;user_action&#x27;: &#x27;10&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64bc542b8; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test&#x27;<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc16198&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc48908&gt;<br/>user_action = &#x27;10&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [200]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected status code - 400</span><br/><span class="error">E           Actual status code -                 200</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected status code - 400\nActual status code -                 200\n&#x27;<br/>response   = &lt;Response [200]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,975 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,975 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,981 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: &quot;test&quot;}
+2019-05-23 01:18:43,983 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,987 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,988 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: &quot;test&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc25320&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc13f28&gt;<br/>body = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: None}, user_action = None<br/>feedback = None<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: None}<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = None<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc25320&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc13f28&gt;<br/>user_action = None<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [200]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected status code - 400</span><br/><span class="error">E           Actual status code -                 200</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected status code - 400\nActual status code -                 200\n&#x27;<br/>response   = &lt;Response [200]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,004 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,005 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,010 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: null, &quot;feedback&quot;: null}
+2019-05-23 01:18:44,011 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,014 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:44,015 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: null, &quot;feedback&quot;: null}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc25828&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbef4e0&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;&#x27;, &#x27;user_action&#x27;: 2}, user_action = 2, feedback = &#x27;&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;&#x27;, &#x27;user_action&#x27;: 2}<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;&#x27;<br/>payload    = {&#x27;errors&#x27;: [&#x27;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&#x27;, &#x27;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc25828&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbef4e0&gt;<br/>user_action = 2<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,031 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,031 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,035 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: 2, &quot;feedback&quot;: &quot;&quot;}
+2019-05-23 01:18:44,037 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,039 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 203
+2019-05-23 01:18:44,040 - INFO - Response {&quot;errors&quot;:[&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;,&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;203&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: 2, &quot;feedback&quot;: &quot;&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 203
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;,&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;203&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbef6a0&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbfa5f8&gt;<br/>body = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: [&#x27;8&#x27;]}, user_action = [&#x27;8&#x27;]<br/>feedback = None<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: None, &#x27;user_action&#x27;: [&#x27;8&#x27;]}<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = None<br/>payload    = {&#x27;errors&#x27;: [&#x27;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&#x27;, &#x27;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbef6a0&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbfa5f8&gt;<br/>user_action = [&#x27;8&#x27;]<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,053 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,053 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,059 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: [&quot;8&quot;], &quot;feedback&quot;: null}
+2019-05-23 01:18:44,062 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,064 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 203
+2019-05-23 01:18:44,066 - INFO - Response {&quot;errors&quot;:[&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;,&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;203&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: [&quot;8&quot;], &quot;feedback&quot;: null}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 203
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;,&quot;json: invalid use of ,string struct tag, trying to unmarshal unquoted value into int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;203&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc04c50&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bc046d8&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;test1&#x27;, &#x27;user_action&#x27;: &#x27;1.7&#x27;}, user_action = &#x27;1.7&#x27;<br/>feedback = &#x27;test1&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;test1&#x27;, &#x27;user_action&#x27;: &#x27;1.7&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333db0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test1&#x27;<br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&#x27;, &#x27;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc04c50&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bc046d8&gt;<br/>user_action = &#x27;1.7&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,101 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,101 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,106 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;1.7&quot;, &quot;feedback&quot;: &quot;test1&quot;}
+2019-05-23 01:18:44,109 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,111 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 209
+2019-05-23 01:18:44,112 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&quot;,&quot;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;209&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;1.7&quot;, &quot;feedback&quot;: &quot;test1&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 209
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&quot;,&quot;json: cannot unmarshal number 1.7 into Go struct field TRequest.user_action of type int&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;209&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb78d0&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbb7ef0&gt;<br/>body = {&#x27;feedback&#x27;: 4, &#x27;user_action&#x27;: &#x27;4&#x27;}, user_action = &#x27;4&#x27;, feedback = 4<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: 4, &#x27;user_action&#x27;: &#x27;4&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64c333a08; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = 4<br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&#x27;, &#x27;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb78d0&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbb7ef0&gt;<br/>user_action = &#x27;4&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,152 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,153 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,157 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;4&quot;, &quot;feedback&quot;: 4}
+2019-05-23 01:18:44,158 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,161 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 201
+2019-05-23 01:18:44,161 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&quot;,&quot;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;201&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;4&quot;, &quot;feedback&quot;: 4}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 201
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&quot;,&quot;json: cannot unmarshal number into Go struct field TRequest.feedback of type string&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;201&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb7f98&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc543f0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbaefd0&gt;<br/>body = {&#x27;feedback&#x27;: [4], &#x27;user_action&#x27;: &#x27;3&#x27;}, user_action = &#x27;3&#x27;, feedback = [4]<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: [4], &#x27;user_action&#x27;: &#x27;3&#x27;}<br/>connect_to_db = &lt;connection object at 0x7fa64bc543f0; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = [4]<br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&#x27;, &#x27;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb7f98&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbaefd0&gt;<br/>user_action = &#x27;3&#x27;<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,178 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,179 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,183 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;3&quot;, &quot;feedback&quot;: [4]}
+2019-05-23 01:18:44,185 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,187 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 199
+2019-05-23 01:18:44,188 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&quot;,&quot;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;199&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;3&quot;, &quot;feedback&quot;: [4]}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 199
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&quot;,&quot;json: cannot unmarshal array into Go struct field TRequest.feedback of type string&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;199&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bc04710&gt;<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbc7470&gt;<br/>body = {&#x27;feedback&#x27;: &#x27;test&#x27;, &#x27;user_action&#x27;: None}, user_action = None<br/>feedback = &#x27;test&#x27;<br/><br/>    @pytest.mark.parametrize(<br/>        &quot;user_action, feedback&quot;,<br/>        [<br/>            (&quot;8&quot;, &quot;&quot;),<br/>            (&quot;10&quot;, None),<br/>            (&quot;10&quot;, &quot;test&quot;),<br/>            (None, None),<br/>            (2, &quot;&quot;),<br/>            ([&quot;8&quot;], None),<br/>            (&quot;-2&quot;, &quot;&quot;),<br/>            (&quot;1.7&quot;, &quot;test1&quot;),<br/>            (&quot;11&quot;, &quot;test2&quot;),<br/>            (&quot;4&quot;, 4),<br/>            (&quot;3&quot;, [4]),<br/>            (None, &quot;test&quot;)<br/>        ]<br/>    )<br/>    def test_validation_error(self, connect_to_db, sender, body, user_action, feedback):<br/>        &quot;&quot;&quot;with not valid values inside json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(body)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>body       = {&#x27;feedback&#x27;: &#x27;test&#x27;, &#x27;user_action&#x27;: None}<br/>connect_to_db = &lt;connection object at 0x7fa64bc54180; dsn: &#x27;user=postgres password=xxx dbname=core host=localhost port=5433&#x27;, closed: 0&gt;<br/>feedback   = &#x27;test&#x27;<br/>payload    = {&#x27;status&#x27;: &#x27;ok&#x27;}<br/>res        = &lt;Response [200]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bc04710&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbc7470&gt;<br/>user_action = None<br/><br/>tests/test_create_rate.py:87: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [200]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected status code - 400</span><br/><span class="error">E           Actual status code -                 200</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected status code - 400\nActual status code -                 200\n&#x27;<br/>response   = &lt;Response [200]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,204 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,204 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,209 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: null, &quot;feedback&quot;: &quot;test&quot;}
+2019-05-23 01:18:44,210 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,216 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:44,217 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: null, &quot;feedback&quot;: &quot;test&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate not allowed method</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb72b0&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbef2e8&gt;<br/><br/>    def test_not_allowed(self, sender):<br/>        &quot;&quot;&quot;not allowed method&quot;&quot;&quot;<br/>    <br/>        res = sender.build(&#x27;GET&#x27;, REQUEST_PATH)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_NO_METHOD)<br/><span class="error">E       TypeError: assert_valid_response() missing 1 required positional argument: &#x27;content_type&#x27;</span><br/><br/>res        = &lt;Response [404]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbb72b0&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbef2e8&gt;<br/><br/>tests/test_create_rate.py:100: TypeError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,233 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,234 - INFO - Test create rate not allowed method
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate not allowed method----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,234 - INFO - GET-request will be send to http://localhost:58001/nps without any headers
+2019-05-23 01:18:44,236 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,238 - DEBUG - http://localhost:58001 &quot;GET /nps HTTP/1.1&quot; 404 18
+2019-05-23 01:18:44,239 - INFO - Response 404 page not found with headers {&#x27;Content-Type&#x27;: &#x27;text/plain&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;18&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 GET-request will be send to http://localhost:58001/nps without any headers
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;GET /nps HTTP/1.1&quot; 404 18
+INFO     public_api:utils.py:49 Response 404 page not found with headers {&#x27;Content-Type&#x27;: &#x27;text/plain&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;18&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate request with invalid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbef390&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bb522b0&gt;<br/><br/>    def test_invalid_json(self, sender):<br/>        &quot;&quot;&quot;request with invalid json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(&#x27;&quot;&quot;&#x27;)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        self.response = res<br/>    <br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;, &#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbef390&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bb522b0&gt;<br/><br/>tests/test_create_rate.py:113: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,246 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,246 - INFO - Test create rate request with invalid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate request with invalid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,247 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;\&quot;\&quot;&quot;
+2019-05-23 01:18:44,248 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,250 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+2019-05-23 01:18:44,251 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;\&quot;\&quot;&quot;
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate request with empty json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbc2dd8&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bbc22e8&gt;<br/><br/>    def test_empty_json(self, sender):<br/>        &quot;&quot;&quot;request with empty json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(&#x27;{}&#x27;)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        self.response = res<br/>    <br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;, &#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbc2dd8&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bbc22e8&gt;<br/><br/>tests/test_create_rate.py:127: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,265 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,265 - INFO - Test create rate request with empty json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate request with empty json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,266 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;{}&quot;
+2019-05-23 01:18:44,267 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,270 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+2019-05-23 01:18:44,271 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;{}&quot;
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test create rate request with empty json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_create_rate.TestPostRate object at 0x7fa64bbc2358&gt;<br/>sender = &lt;helpers.utils.ApiRequest object at 0x7fa64bb7a080&gt;<br/><br/>    def test_random_json(self, sender):<br/>        &quot;&quot;&quot;request with empty json&quot;&quot;&quot;<br/>    <br/>        sender.set_data(&#x27;{&quot;user&quot;: &quot;admin&quot;, &quot;comment&quot;: &quot;test&quot;}&#x27;)<br/>        sender.add_headers({&#x27;Content-Type&#x27;: &#x27;application/json&#x27;})<br/>    <br/>        res = sender.build(REQUEST_TYPE, REQUEST_PATH)<br/>        self.response = res<br/>    <br/>        payload = json.loads(res.text)<br/>    <br/>&gt;       assert_valid_response(res, STATUS_CODE_BAD_REQUEST, CONTENT_TYPE_JSON)<br/><br/>payload    = {&#x27;errors&#x27;: [&#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;, &#x27;json: cannot unmarshal string into Go value of type main.TRequest&#x27;], &#x27;status&#x27;: &#x27;error&#x27;}<br/>res        = &lt;Response [400]&gt;<br/>self       = &lt;test_create_rate.TestPostRate object at 0x7fa64bbc2358&gt;<br/>sender     = &lt;helpers.utils.ApiRequest object at 0x7fa64bb7a080&gt;<br/><br/>tests/test_create_rate.py:141: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>response = &lt;Response [400]&gt;, status_code = 400<br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/><br/>    def assert_valid_response(response, status_code, content_type):<br/>        msg = &quot;&quot;<br/>        if response.status_code != status_code:<br/>            msg += f&quot;Expected status code - {status_code}\nActual status code - \<br/>                    {response.status_code}\n&quot;<br/>    <br/>        if response.headers[&#x27;Content-Type&#x27;] != content_type:<br/>            msg += f&quot;Expected Content-Type - {content_type}\nActual status code - \<br/>                    {response.headers[&#x27;Content-Type&#x27;]}&quot;<br/>    <br/>        if len(msg) != 0:<br/>&gt;           raise AssertionError(msg)<br/><span class="error">E           AssertionError: Expected Content-Type - application/json; charset=utf-8</span><br/><span class="error">E           Actual status code -                 text/plain; charset=utf-8</span><br/><br/>content_type = &#x27;application/json; charset=utf-8&#x27;<br/>msg        = &#x27;Expected Content-Type - application/json; charset=utf-8\nActual status code -                 text/plain; charset=utf-8&#x27;<br/>response   = &lt;Response [400]&gt;<br/>status_code = 400<br/><br/>tests/support/assertions.py:42: AssertionError<br/>---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,283 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,283 - INFO - Test create rate request with empty json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate request with empty json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,283 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;{\&quot;user\&quot;: \&quot;admin\&quot;, \&quot;comment\&quot;: \&quot;test\&quot;}&quot;
+2019-05-23 01:18:44,285 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,288 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+2019-05-23 01:18:44,288 - INFO - Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload &quot;{\&quot;user\&quot;: \&quot;admin\&quot;, \&quot;comment\&quot;: \&quot;test\&quot;}&quot;
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 165
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;,&quot;json: cannot unmarshal string into Go value of type main.TRequest&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;165&#x27;, &#x27;Content-Type&#x27;: &#x27;text/plain; charset=utf-8&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.03</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,622 - INFO - =================================================================
+2019-05-23 01:18:43,622 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,623 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:19 =================================================================
+INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,630 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;1&quot;, &quot;feedback&quot;: &quot;test&quot;}
+2019-05-23 01:18:43,633 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,648 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,649 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;1&quot;, &quot;feedback&quot;: &quot;test&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,660 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,660 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,669 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;2&quot;, &quot;feedback&quot;: &quot;test\ntest&quot;}
+2019-05-23 01:18:43,673 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,678 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,679 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;2&quot;, &quot;feedback&quot;: &quot;test\ntest&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,763 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,764 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,769 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;2&quot;, &quot;feedback&quot;: &quot;&quot;}
+2019-05-23 01:18:43,771 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,778 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,779 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;2&quot;, &quot;feedback&quot;: &quot;&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,812 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,812 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,819 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: &quot;&quot;}
+2019-05-23 01:18:43,820 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,830 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,832 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;10&quot;, &quot;feedback&quot;: &quot;&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with valid json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:43,838 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:43,838 - INFO - Test create rate with valid json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with valid json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:43,843 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;9&quot;, &quot;feedback&quot;: &quot;test1&quot;}
+2019-05-23 01:18:43,844 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:43,847 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+2019-05-23 01:18:43,848 - INFO - Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;9&quot;, &quot;feedback&quot;: &quot;test1&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 200 15
+INFO     public_api:utils.py:49 Response {&quot;status&quot;:&quot;ok&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:43 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;15&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,083 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,084 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,088 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;-2&quot;, &quot;feedback&quot;: &quot;&quot;}
+2019-05-23 01:18:44,090 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,092 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 44
+2019-05-23 01:18:44,093 - INFO - Response {&quot;errors&quot;:[&quot;Invalid rate&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;44&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;-2&quot;, &quot;feedback&quot;: &quot;&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 44
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;Invalid rate&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;44&#x27;}</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test create rate with not valid values inside json</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">---------------------------- Captured stdout setup -----------------------------<br/>2019-05-23 01:18:44,130 - INFO - ==================TEST STARTED==================
+2019-05-23 01:18:44,130 - INFO - Test create rate with not valid values inside json
+------------------------------ Captured log setup ------------------------------<br/>INFO     public_api:test_create_rate.py:25 ==================TEST STARTED==================
+INFO     public_api:test_create_rate.py:26 Test create rate with not valid values inside json----------------------------- Captured stdout call -----------------------------<br/>2019-05-23 01:18:44,136 - INFO - POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;11&quot;, &quot;feedback&quot;: &quot;test2&quot;}
+2019-05-23 01:18:44,137 - DEBUG - Starting new HTTP connection (1): localhost:58001
+2019-05-23 01:18:44,140 - DEBUG - http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 44
+2019-05-23 01:18:44,142 - INFO - Response {&quot;errors&quot;:[&quot;Invalid rate&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;44&#x27;}
+------------------------------ Captured log call -------------------------------<br/>INFO     public_api:utils.py:41 POST-request will be send to http://localhost:58001/nps with headers {&quot;Content-Type&quot;: &quot;application/json&quot;} with payload {&quot;user_action&quot;: &quot;11&quot;, &quot;feedback&quot;: &quot;test2&quot;}
+DEBUG    urllib3.connectionpool:connectionpool.py:206 Starting new HTTP connection (1): localhost:58001
+DEBUG    urllib3.connectionpool:connectionpool.py:396 http://localhost:58001 &quot;POST /nps HTTP/1.1&quot; 400 44
+INFO     public_api:utils.py:49 Response {&quot;errors&quot;:[&quot;Invalid rate&quot;],&quot;status&quot;:&quot;error&quot;} with headers {&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Date&#x27;: &#x27;Thu, 23 May 2019 01:18:44 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;44&#x27;}</div></td></tr></tbody></table></body></html>
