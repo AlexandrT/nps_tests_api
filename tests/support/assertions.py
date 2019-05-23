@@ -31,12 +31,12 @@ def _load_json_schema(filename):
 def assert_valid_response(response, status_code, content_type):
     msg = ""
     if response.status_code != status_code:
-        msg += f"Expected status code - {status_code}\nActual status code - \
-                {response.status_code}\n"
+        msg += f"Expected status code - {status_code}\nActual status code - "\
+                f"{response.status_code}\n"
 
     if response.headers['Content-Type'] != content_type:
-        msg += f"Expected Content-Type - {content_type}\nActual status code - \
-                {response.headers['Content-Type']}"
+        msg += f"Expected Content-Type - {content_type}\nActual status code - "\
+                f"{response.headers['Content-Type']}"
 
     if len(msg) != 0:
         raise AssertionError(msg)
@@ -55,18 +55,23 @@ def get_from_db(conn):
 
     return row
 
-def assert_from_db(conn, user_action, feedback):
+def assert_from_db(conn, user_action, feedback, device_type=""):
     result = get_from_db(conn)
-    flag = False
+    msg = ""
 
     if result["user_action"] != user_action:
-        flag = True
+        msg += f"params from request - 'user_action': '{user_action}'\nparams "\
+                f"from DB - 'user_action': '{result['user_action']}'\n"
 
     if result["feedback"] != feedback:
         if len(set([result["feedback"], feedback]) - set(['', None])) != 0:
-            flag = True
+            msg += f"params from request - 'feedback': '{feedback}'\nparams "\
+                    f"from DB - 'feedback': '{result['feedback']}'\n"
 
-    if flag:
-        raise AssertionError(f"params from request - 'user_action': \
-                {user_action}, 'feedback': {feedback}\nparams from DB - \
-                'user_action': {result['user_action']}, 'feedback': {result['feedback']}")
+    if device_type:
+        if result["device"] != device_type:
+            msg += f"User-Agent - '{device_type}'\n device from DB - "\
+                    f"'device': '{result['device']}'\n"
+
+    if len(msg) != 0:
+        raise AssertionError(msg)
